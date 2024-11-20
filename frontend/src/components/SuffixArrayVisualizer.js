@@ -7,6 +7,93 @@ const SuffixArrayVisualizer = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Suffix Array 계산 및 시각화 단계 생성
+  // const calculateSuffixArray = (s) => {
+  //   const n = s.length;
+  //   let rank = Array(n + 1).fill(0);
+  //   let newRank = Array(n + 1).fill(0);
+  //   let sa = Array.from({ length: n }, (_, i) => i);
+  //   let steps = [];
+
+  //   // 초기화 단계
+  //   rank = [...s].map((c) => c.charCodeAt(0));
+  //   rank.push(-1);
+
+  //   steps.push({
+  //     phase: "초기화",
+  //     k: 0,
+  //     ranks: [...rank],
+  //     pairs: null,
+  //     sortedPairs: null,
+  //     description: "첫 글자를 기준으로 초기 순위 부여",
+  //   });
+
+  //   // Doubling Algorithm
+  //   for (let k = 1; k < n; k *= 2) {
+  //     let pairs = [];
+  //     // Pair 생성
+  //     for (let i = 0; i < n; i++) {
+  //       const nextRank = i + k < n ? rank[i + k] : -1;
+  //       pairs.push({
+  //         pair: [rank[i], nextRank],
+  //         index: i,
+  //         suffix: s.slice(i),
+  //       });
+  //     }
+
+  //     steps.push({
+  //       phase: "페어 생성",
+  //       k: k,
+  //       ranks: [...rank],
+  //       pairs: [...pairs],
+  //       sortedPairs: null,
+  //       description: `k=${k}일 때의 페어 생성`,
+  //     });
+
+  //     // Pair 정렬
+  //     pairs.sort((a, b) => {
+  //       if (a.pair[0] !== b.pair[0]) return a.pair[0] - b.pair[0];
+  //       return a.pair[1] - b.pair[1];
+  //     });
+
+  //     steps.push({
+  //       phase: "페어 정렬",
+  //       k: k,
+  //       ranks: [...rank],
+  //       pairs: [...pairs],
+  //       sortedPairs: [...pairs],
+  //       description: "페어를 기준으로 정렬",
+  //     });
+
+  //     // 새로운 순위 부여
+  //     newRank = Array(n + 1).fill(0);
+  //     newRank[pairs[0].index] = 0;
+  //     let rankValue = 0;
+
+  //     for (let i = 1; i < n; i++) {
+  //       if (
+  //         pairs[i].pair[0] !== pairs[i - 1].pair[0] ||
+  //         pairs[i].pair[1] !== pairs[i - 1].pair[1]
+  //       ) {
+  //         rankValue++;
+  //       }
+  //       newRank[pairs[i].index] = rankValue;
+  //     }
+
+  //     if (rankValue === n - 1) break;
+  //     rank = [...newRank];
+
+  //     steps.push({
+  //       phase: "순위 갱신",
+  //       k: k,
+  //       ranks: [...rank],
+  //       pairs: [...pairs],
+  //       sortedPairs: [...pairs],
+  //       description: "새로운 순위 부여 완료",
+  //     });
+  //   }
+
+  //   return steps;
+  // };
   const calculateSuffixArray = (s) => {
     const n = s.length;
     let rank = Array(n + 1).fill(0);
@@ -14,7 +101,7 @@ const SuffixArrayVisualizer = () => {
     let sa = Array.from({ length: n }, (_, i) => i);
     let steps = [];
 
-    // 초기화 단계
+    // 초기 순위 설정
     rank = [...s].map((c) => c.charCodeAt(0));
     rank.push(-1);
 
@@ -27,10 +114,9 @@ const SuffixArrayVisualizer = () => {
       description: "첫 글자를 기준으로 초기 순위 부여",
     });
 
-    // Doubling Algorithm
+    // Doubling 알고리즘
     for (let k = 1; k < n; k *= 2) {
       let pairs = [];
-      // Pair 생성
       for (let i = 0; i < n; i++) {
         const nextRank = i + k < n ? rank[i + k] : -1;
         pairs.push({
@@ -40,43 +126,45 @@ const SuffixArrayVisualizer = () => {
         });
       }
 
+      // 페어 생성 단계
       steps.push({
         phase: "페어 생성",
         k: k,
         ranks: [...rank],
         pairs: [...pairs],
-        sortedPairs: null,
+        sortedPairs: null, // 정렬되기 전의 상태를 유지
         description: `k=${k}일 때의 페어 생성`,
       });
 
-      // Pair 정렬
-      pairs.sort((a, b) => {
+      // 페어 정렬
+      const sortedPairs = [...pairs].sort((a, b) => {
         if (a.pair[0] !== b.pair[0]) return a.pair[0] - b.pair[0];
         return a.pair[1] - b.pair[1];
       });
 
+      // 페어 정렬 단계
       steps.push({
         phase: "페어 정렬",
         k: k,
         ranks: [...rank],
-        pairs: [...pairs],
-        sortedPairs: [...pairs],
+        pairs: [...pairs], // 이전 단계의 페어 유지
+        sortedPairs: [...sortedPairs], // 정렬된 페어만 업데이트
         description: "페어를 기준으로 정렬",
       });
 
-      // 새로운 순위 부여
+      // 새로운 순위 갱신
       newRank = Array(n + 1).fill(0);
-      newRank[pairs[0].index] = 0;
+      newRank[sortedPairs[0].index] = 0;
       let rankValue = 0;
 
       for (let i = 1; i < n; i++) {
         if (
-          pairs[i].pair[0] !== pairs[i - 1].pair[0] ||
-          pairs[i].pair[1] !== pairs[i - 1].pair[1]
+          sortedPairs[i].pair[0] !== sortedPairs[i - 1].pair[0] ||
+          sortedPairs[i].pair[1] !== sortedPairs[i - 1].pair[1]
         ) {
           rankValue++;
         }
-        newRank[pairs[i].index] = rankValue;
+        newRank[sortedPairs[i].index] = rankValue;
       }
 
       if (rankValue === n - 1) break;
@@ -86,8 +174,8 @@ const SuffixArrayVisualizer = () => {
         phase: "순위 갱신",
         k: k,
         ranks: [...rank],
-        pairs: [...pairs],
-        sortedPairs: [...pairs],
+        pairs: [...pairs], // 이전 페어를 유지
+        sortedPairs: [...sortedPairs], // 정렬 결과 반영
         description: "새로운 순위 부여 완료",
       });
     }
