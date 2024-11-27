@@ -4,44 +4,69 @@ const SuffixArrayVisualizer = () => {
   const [input, setInput] = useState("");
   const [steps, setSteps] = useState([]);
   const [currentStep, setCurrentStep] = useState(0);
-  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Radix sort 구현
-  const radixSortPairs = (pairs) => {
+  // 기수 정렬 구현
+  const radixSort = (pairs) => {
     let sortingSteps = [];
-    const n = pairs.length;
     let result = [...pairs];
 
-    // 두 번째 값으로 먼저 정렬한 후 첫 번째 값으로 정렬 (안정성 유지)
-    for (let pairIndex = 1; pairIndex >= 0; pairIndex--) {
-      // 버킷 초기화
-      let buckets = Array.from({ length: 300 }, () => []); // ASCII 값 범위 고려
+    // 두 번째 값으로 먼저 정렬
+    const sortBySecond = () => {
+      let buckets = Array.from({ length: 128 }, () => []); // ASCII 범위
 
-      // 현재 값에 따라 버킷에 분배
-      for (let i = 0; i < n; i++) {
-        const value = result[i].pair[pairIndex];
-        buckets[value + 128].push(result[i]); // 음수 처리를 위해 +128
-      }
+      // 두 번째 값 기준으로 버킷에 분배
+      result.forEach((pair) => {
+        const value = pair.pair[1] === null ? 0 : pair.pair[1];
+        buckets[value].push(pair);
+      });
 
       // 버킷에서 순서대로 가져오기
-      result = [];
-      for (let bucket of buckets) {
-        if (bucket.length > 0) {
-          result.push(...bucket);
-        }
-      }
+      result = buckets.flat();
 
-      // 정렬 단계 저장
-      sortingSteps.push({
-        phase: "기수 정렬",
-        description: `${pairIndex === 0 ? "첫" : "두"} 번째 값 기준 정렬`,
-        sortedPairs: [...result],
-        radixInfo: {
-          currentKey: pairIndex,
-          bucketSample: buckets.map((b) => b.length).filter((l) => l > 0),
-        },
+      const usedBuckets = buckets
+        .map((bucket, ascii) => ({ ascii, count: bucket.length }))
+        .filter((b) => b.count > 0);
+
+      if (usedBuckets.length > 0) {
+        sortingSteps.push({
+          phase: "기수 정렬",
+          description: "두 번째 값 기준 정렬",
+          sortedPairs: [...result],
+          bucketInfo: usedBuckets,
+        });
+      }
+    };
+
+    // 첫 번째 값으로 정렬
+    const sortByFirst = () => {
+      let buckets = Array.from({ length: 128 }, () => []); // ASCII 범위
+
+      // 첫 번째 값 기준으로 버킷에 분배
+      result.forEach((pair) => {
+        const value = pair.pair[0];
+        buckets[value].push(pair);
       });
-    }
+
+      // 버킷에서 순서대로 가져오기
+      result = buckets.flat();
+
+      const usedBuckets = buckets
+        .map((bucket, ascii) => ({ ascii, count: bucket.length }))
+        .filter((b) => b.count > 0);
+
+      if (usedBuckets.length > 0) {
+        sortingSteps.push({
+          phase: "기수 정렬",
+          description: "첫 번째 값 기준 정렬",
+          sortedPairs: [...result],
+          bucketInfo: usedBuckets,
+        });
+      }
+    };
+
+    // 두 번째 값으로 정렬 후 첫 번째 값으로 정렬
+    sortBySecond();
+    sortByFirst();
 
     return { sortedPairs: result, sortingSteps };
   };
@@ -49,30 +74,37 @@ const SuffixArrayVisualizer = () => {
   const calculateSuffixArray = (s) => {
     const n = s.length;
     let rank = Array(n + 1).fill(0);
-    let newRank = Array(n + 1).fill(0);
     let steps = [];
 
-    // 초기 순위 설정 (사전순)
+    // 초기 순위 설정 (ASCII 값 기준)
     rank = [...s].map((c) => c.charCodeAt(0));
-    rank.push(-1); // 문자열 끝 표시
+    rank.push(-1);
+
+    // 초기 상태를 steps에 추가 - ASCII 값 포함
+    const initialPairs = [...s]
+      .map((c, i) => ({
+        pair: [c.charCodeAt(0), null],
+        index: i,
+        suffix: s.slice(i),
+        ascii: c.charCodeAt(0),
+      }))
+      .sort((a, b) => a.ascii - b.ascii);
 
     steps.push({
       phase: "초기화",
       k: 0,
       ranks: [...rank],
-      pairs: null,
-      sortedPairs: null,
-      description: "사전순으로 초기 순위 부여",
+      pairs: initialPairs,
+      sortedPairs: initialPairs,
+      description: "ASCII 값 기준으로 초기 정렬",
     });
 
     // Doubling 알고리즘
     for (let k = 1; k < n; k *= 2) {
       let pairs = [];
-      // k 길이 페어 생성
       for (let i = 0; i < n; i++) {
-        const nextRank = i + k < n ? rank[i + k] : -1;
         pairs.push({
-          pair: [rank[i], nextRank],
+          pair: [rank[i], i + k < n ? rank[i + k] : -1],
           index: i,
           suffix: s.slice(i),
         });
@@ -83,25 +115,21 @@ const SuffixArrayVisualizer = () => {
         k: k,
         ranks: [...rank],
         pairs: [...pairs],
-        sortedPairs: null,
-        description: `k=${k}일 때의 페어 생성`,
+        description: `k=${k}일 때 페어 생성`,
       });
 
       // 기수 정렬 적용
-      const { sortedPairs, sortingSteps } = radixSortPairs(pairs);
-
-      // 정렬 과정의 각 단계를 steps에 추가
-      sortingSteps.forEach((step) => {
-        steps.push({
+      const { sortedPairs, sortingSteps } = radixSort(pairs);
+      steps.push(
+        ...sortingSteps.map((step) => ({
           ...step,
           k: k,
           ranks: [...rank],
-          pairs: [...pairs],
-        });
-      });
+        }))
+      );
 
       // 새로운 순위 부여
-      newRank = Array(n + 1).fill(0);
+      let newRank = Array(n + 1).fill(-1);
       newRank[sortedPairs[0].index] = 0;
       let rankValue = 0;
 
@@ -121,26 +149,10 @@ const SuffixArrayVisualizer = () => {
         ranks: [...newRank],
         pairs: [...pairs],
         sortedPairs: [...sortedPairs],
-        description: "새로운 순위 부여 완료",
+        description: "새로운 순위 부여",
       });
 
-      if (rankValue === n - 1) {
-        // 모든 순위가 다르면 종료
-        steps.push({
-          phase: "최종 결과",
-          k: k,
-          ranks: [...newRank],
-          pairs: null,
-          sortedPairs: sortedPairs.map((p) => ({
-            index: p.index,
-            suffix: p.suffix,
-            rank: rankValue,
-          })),
-          description: "모든 접미사가 사전순으로 정렬됨",
-        });
-        break;
-      }
-
+      if (rankValue === n - 1) break;
       rank = [...newRank];
     }
 
@@ -159,22 +171,19 @@ const SuffixArrayVisualizer = () => {
           <p className="text-blue-700">{step.description}</p>
         </div>
 
-        {step.radixInfo && (
+        {step.bucketInfo && (
           <div className="p-4 bg-yellow-50 rounded-lg">
-            <h4 className="text-lg font-semibold text-yellow-900">
-              기수 정렬 정보
-            </h4>
-            <p className="text-yellow-700">
-              현재 정렬 중인 키: {step.radixInfo.currentKey === 0 ? "첫" : "두"}{" "}
-              번째 값
-            </p>
-            {step.radixInfo.bucketSample.length > 0 && (
-              <div className="mt-2">
-                <p className="text-yellow-900 font-semibold">
-                  비어있지 않은 버킷 수: {step.radixInfo.bucketSample.length}
-                </p>
-              </div>
-            )}
+            <h4 className="text-lg font-semibold text-yellow-900">버킷 정보</h4>
+            <div className="grid grid-cols-4 gap-4 mt-2">
+              {step.bucketInfo.map(({ ascii, count }, idx) => (
+                <div key={idx} className="text-yellow-700">
+                  {ascii === 0
+                    ? "null"
+                    : `'${String.fromCharCode(ascii)}' (${ascii})`}
+                  : {count}개
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -189,96 +198,57 @@ const SuffixArrayVisualizer = () => {
                   접미사
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {step.k === 0 ? "ASCII 값" : "비교 값 쌍"}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   순위
                 </th>
-                {step.pairs && (
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    페어
-                  </th>
-                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {step.ranks &&
-                step.ranks.slice(0, -1).map((rank, idx) => (
-                  <tr key={idx}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {idx}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {input.slice(idx)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {rank}
-                    </td>
-                    {step.pairs && (
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {`(${step.pairs[idx].pair[0]}, ${step.pairs[idx].pair[1]})`}
-                      </td>
-                    )}
-                  </tr>
-                ))}
+              {(step.sortedPairs || step.pairs || []).map((item, idx) => (
+                <tr key={idx}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {item.index}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {item.suffix}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {step.k === 0
+                      ? `${item.ascii} ('${String.fromCharCode(item.ascii)}')`
+                      : `(${item.pair[0]}, ${
+                          item.pair[1] === -1 ? "null" : item.pair[1]
+                        })`}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {step.ranks[item.index]}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-
-        {step.sortedPairs && (
-          <div className="mt-4">
-            <h4 className="text-lg font-semibold mb-2">정렬된 결과</h4>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      위치
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      접미사
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      값
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {step.sortedPairs.map((pair, idx) => (
-                    <tr key={idx}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {pair.index}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {pair.suffix}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {pair.pair
-                          ? `(${pair.pair[0]}, ${pair.pair[1]})`
-                          : pair.rank}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
       </div>
     );
   };
 
   const handleCalculate = () => {
     if (!input) return;
-    setIsProcessing(true);
-    const newSteps = calculateSuffixArray(input);
-    setSteps(newSteps);
-    setCurrentStep(0);
-    setIsProcessing(false);
+    try {
+      const newSteps = calculateSuffixArray(input);
+      setSteps(newSteps);
+      setCurrentStep(0);
+    } catch (error) {
+      console.error("Error calculating suffix array:", error);
+    }
   };
 
   return (
     <div className="max-w-6xl mx-auto p-4 space-y-6">
       <div className="bg-white shadow rounded-lg p-6">
         <h2 className="text-2xl font-bold mb-4">
-          Suffix Array 시각화 (기수 정렬 + Doubling)
+          Suffix Array 시각화 (ASCII 기반 정렬)
         </h2>
 
         <div className="flex space-x-4 mb-6">
@@ -291,7 +261,7 @@ const SuffixArrayVisualizer = () => {
           />
           <button
             onClick={handleCalculate}
-            disabled={isProcessing || !input}
+            disabled={!input}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
           >
             계산
