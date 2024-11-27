@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 
 const SuffixArrayVisualizer = () => {
   const [input, setInput] = useState("");
@@ -6,277 +6,270 @@ const SuffixArrayVisualizer = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Suffix Array 계산 및 시각화 단계 생성
-  // const calculateSuffixArray = (s) => {
-  //   const n = s.length;
-  //   let rank = Array(n + 1).fill(0);
-  //   let newRank = Array(n + 1).fill(0);
-  //   let sa = Array.from({ length: n }, (_, i) => i);
-  //   let steps = [];
-
-  //   // 초기화 단계
-  //   rank = [...s].map((c) => c.charCodeAt(0));
-  //   rank.push(-1);
-
-  //   steps.push({
-  //     phase: "초기화",
-  //     k: 0,
-  //     ranks: [...rank],
-  //     pairs: null,
-  //     sortedPairs: null,
-  //     description: "첫 글자를 기준으로 초기 순위 부여",
-  //   });
-
-  //   // Doubling Algorithm
-  //   for (let k = 1; k < n; k *= 2) {
-  //     let pairs = [];
-  //     // Pair 생성
-  //     for (let i = 0; i < n; i++) {
-  //       const nextRank = i + k < n ? rank[i + k] : -1;
-  //       pairs.push({
-  //         pair: [rank[i], nextRank],
-  //         index: i,
-  //         suffix: s.slice(i),
-  //       });
-  //     }
-
-  //     steps.push({
-  //       phase: "페어 생성",
-  //       k: k,
-  //       ranks: [...rank],
-  //       pairs: [...pairs],
-  //       sortedPairs: null,
-  //       description: `k=${k}일 때의 페어 생성`,
-  //     });
-
-  //     // Pair 정렬
-  //     pairs.sort((a, b) => {
-  //       if (a.pair[0] !== b.pair[0]) return a.pair[0] - b.pair[0];
-  //       return a.pair[1] - b.pair[1];
-  //     });
-
-  //     steps.push({
-  //       phase: "페어 정렬",
-  //       k: k,
-  //       ranks: [...rank],
-  //       pairs: [...pairs],
-  //       sortedPairs: [...pairs],
-  //       description: "페어를 기준으로 정렬",
-  //     });
-
-  //     // 새로운 순위 부여
-  //     newRank = Array(n + 1).fill(0);
-  //     newRank[pairs[0].index] = 0;
-  //     let rankValue = 0;
-
-  //     for (let i = 1; i < n; i++) {
-  //       if (
-  //         pairs[i].pair[0] !== pairs[i - 1].pair[0] ||
-  //         pairs[i].pair[1] !== pairs[i - 1].pair[1]
-  //       ) {
-  //         rankValue++;
-  //       }
-  //       newRank[pairs[i].index] = rankValue;
-  //     }
-
-  //     if (rankValue === n - 1) break;
-  //     rank = [...newRank];
-
-  //     steps.push({
-  //       phase: "순위 갱신",
-  //       k: k,
-  //       ranks: [...rank],
-  //       pairs: [...pairs],
-  //       sortedPairs: [...pairs],
-  //       description: "새로운 순위 부여 완료",
-  //     });
-  //   }
-
-  //   return steps;
-  // };
-  const calculateSuffixArray = (s) => {
+  const calculateSuffixArray = useCallback((s) => {
+    const steps = [];
     const n = s.length;
-    let rank = Array(n + 1).fill(0);
-    let newRank = Array(n + 1).fill(0);
-    let sa = Array.from({ length: n }, (_, i) => i);
-    let steps = [];
+    let rank = new Array(n);
+    let currentPairs = null;
 
-    // 초기 순위 설정
-    rank = [...s].map((c) => c.charCodeAt(0));
-    rank.push(-1);
-
-    steps.push({
-      phase: "초기화",
-      k: 0,
-      ranks: [...rank],
-      pairs: null,
-      sortedPairs: null,
-      description: "첫 글자를 기준으로 초기 순위 부여",
+    // k=1 단계: ASCII 코드 기준 순위 설정
+    let chars = [...new Set(s.split(""))].sort(); // 중복 제거 후 정렬
+    let initialRanks = {};
+    chars.forEach((char, idx) => {
+      initialRanks[char] = idx + 1;
     });
 
-    // Doubling 알고리즘
-    for (let k = 1; k < n; k *= 2) {
-      let pairs = [];
+    for (let i = 0; i < n; i++) {
+      rank[i] = initialRanks[s[i]];
+    }
+
+    // k=1 단계 정보 저장
+    steps.push({
+      phase: "초기화 (k=1)",
+      characterRanks: chars
+        .map((char) => `${char}=${initialRanks[char]}`)
+        .join(", "),
+      ranks: [...rank],
+      suffixes: Array.from({ length: n }, (_, i) => ({
+        index: i,
+        suffix: s.slice(i),
+        firstChar: s[i],
+        rank: rank[i],
+      })),
+      sortedSuffixes: Array.from({ length: n }, (_, i) => ({
+        index: i,
+        suffix: s.slice(i),
+        pairRank: [rank[i], -1],
+        newRank: rank[i],
+      })).sort((a, b) => a.newRank - b.newRank),
+      description: "문자별 순위 부여 및 첫 글자 기준 순위",
+      k: 1,
+    });
+
+    // k=2부터 시작하는 단계별 처리
+    let currentK = 1;
+    while (currentK < n) {
+      // 순위쌍 생성
+      currentPairs = [];
       for (let i = 0; i < n; i++) {
-        const nextRank = i + k < n ? rank[i + k] : -1;
-        pairs.push({
-          pair: [rank[i], nextRank],
+        currentPairs.push({
           index: i,
           suffix: s.slice(i),
+          currentRank: rank[i],
+          nextRank: i + currentK < n ? rank[i + currentK] : -1,
         });
       }
 
-      // 페어 생성 단계
-      steps.push({
-        phase: "페어 생성",
-        k: k,
-        ranks: [...rank],
-        pairs: [...pairs],
-        sortedPairs: null, // 정렬되기 전의 상태를 유지
-        description: `k=${k}일 때의 페어 생성`,
+      // 순위쌍 정렬
+      currentPairs.sort((a, b) => {
+        if (a.currentRank !== b.currentRank) {
+          return a.currentRank - b.currentRank;
+        }
+        return a.nextRank - b.nextRank;
       });
 
-      // 페어 정렬
-      const sortedPairs = [...pairs].sort((a, b) => {
-        if (a.pair[0] !== b.pair[0]) return a.pair[0] - b.pair[0];
-        return a.pair[1] - b.pair[1];
-      });
-
-      // 페어 정렬 단계
-      steps.push({
-        phase: "페어 정렬",
-        k: k,
-        ranks: [...rank],
-        pairs: [...pairs], // 이전 단계의 페어 유지
-        sortedPairs: [...sortedPairs], // 정렬된 페어만 업데이트
-        description: "페어를 기준으로 정렬",
-      });
-
-      // 새로운 순위 갱신
-      newRank = Array(n + 1).fill(0);
-      newRank[sortedPairs[0].index] = 0;
+      // 새로운 순위 부여
+      const tempRank = new Array(n);
+      tempRank[currentPairs[0].index] = 0;
       let rankValue = 0;
 
       for (let i = 1; i < n; i++) {
+        const current = currentPairs[i];
+        const prev = currentPairs[i - 1];
+
         if (
-          sortedPairs[i].pair[0] !== sortedPairs[i - 1].pair[0] ||
-          sortedPairs[i].pair[1] !== sortedPairs[i - 1].pair[1]
+          current.currentRank !== prev.currentRank ||
+          current.nextRank !== prev.nextRank
         ) {
           rankValue++;
         }
-        newRank[sortedPairs[i].index] = rankValue;
+        tempRank[current.index] = rankValue;
       }
 
-      if (rankValue === n - 1) break;
-      rank = [...newRank];
-
+      // 단계 정보 저장
       steps.push({
-        phase: "순위 갱신",
-        k: k,
+        phase: `단계 (k=${currentK * 2})`,
         ranks: [...rank],
-        pairs: [...pairs], // 이전 페어를 유지
-        sortedPairs: [...sortedPairs], // 정렬 결과 반영
-        description: "새로운 순위 부여 완료",
+        suffixes: Array.from({ length: n }, (_, i) => ({
+          index: i,
+          suffix: s.slice(i),
+          pairRank: [rank[i], i + currentK < n ? rank[i + currentK] : -1],
+          newRank: tempRank[i],
+        })),
+        sortedSuffixes: currentPairs.map((item, idx) => ({
+          order: idx + 1,
+          index: item.index,
+          suffix: item.suffix,
+          pairRank: [item.currentRank, item.nextRank],
+          newRank: tempRank[item.index],
+        })),
+        description: `길이 ${currentK * 2}를 기준으로 정렬 및 새로운 순위 부여`,
+        k: currentK * 2,
       });
+
+      if (rankValue === n - 1) break;
+      rank = [...tempRank];
+      currentK *= 2;
     }
 
+    // 최종 결과 저장
+    steps.push({
+      phase: "최종 결과",
+      ranks: [...rank],
+      suffixes: null,
+      sortedSuffixes: currentPairs.map((item) => ({
+        index: item.index,
+        suffix: s.slice(item.index),
+      })),
+      description: "최종 정렬된 접미사 배열",
+      k: currentK * 2,
+    });
+
     return steps;
-  };
+  }, []);
 
-  const handleCalculate = () => {
-    if (!input) return;
-    setIsProcessing(true);
-    const newSteps = calculateSuffixArray(input);
-    setSteps(newSteps);
-    setCurrentStep(0);
-    setIsProcessing(false);
-  };
-
-  const StepVisualizer = ({ step }) => {
+  const StepVisualizer = ({ step, input }) => {
     if (!step) return null;
 
     return (
       <div className="space-y-4">
         <div className="p-4 bg-blue-50 rounded-lg">
           <h3 className="text-lg font-semibold text-blue-900">
-            단계: {step.phase} {step.k > 0 ? `(k=${step.k})` : ""}
+            단계: {step.phase}
           </h3>
           <p className="text-blue-700">{step.description}</p>
+          {step.characterRanks && (
+            <p className="text-blue-700 mt-2">
+              문자별 순위: {step.characterRanks}
+            </p>
+          )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  위치
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  접미사
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  현재 순위
-                </th>
-                {step.pairs && (
+        {step.suffixes && (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    페어
+                    위치
                   </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {step.ranks.slice(0, -1).map((rank, idx) => (
-                <tr key={idx}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {idx}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {input.slice(idx)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {rank}
-                  </td>
-                  {step.pairs && (
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {`(${step.pairs[idx].pair[0]}, ${step.pairs[idx].pair[1]})`}
-                    </td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    접미사
+                  </th>
+                  {step.k === 1 ? (
+                    <>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        첫글자
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        순위
+                      </th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        순위쌍
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        새순위
+                      </th>
+                    </>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {step.suffixes.map((item) => (
+                  <tr key={item.index} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {item.index}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {item.suffix}
+                    </td>
+                    {step.k === 1 ? (
+                      <>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {item.firstChar}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {item.rank}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {`(${item.pairRank[0]}, ${
+                            item.pairRank[1] === -1 ? "$" : item.pairRank[1]
+                          })`}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {item.newRank}
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-        {step.sortedPairs && (
+        {step.sortedSuffixes && (
           <div className="mt-4">
-            <h4 className="text-lg font-semibold mb-2">정렬된 페어</h4>
+            <h4 className="text-lg font-semibold mb-2">정렬된 순서</h4>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    {!step.phase.includes("최종") && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        순서
+                      </th>
+                    )}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       위치
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       접미사
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      페어
-                    </th>
+                    {!step.phase.includes("최종") && (
+                      <>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          순위쌍
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          새순위
+                        </th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {step.sortedPairs.map((pair, idx) => (
-                    <tr key={idx}>
+                  {step.sortedSuffixes.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      {!step.phase.includes("최종") && (
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {item.order}
+                        </td>
+                      )}
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {pair.index}
+                        {item.index}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {pair.suffix}
+                        {item.suffix}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {`(${pair.pair[0]}, ${pair.pair[1]})`}
-                      </td>
+                      {!step.phase.includes("최종") && (
+                        <>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {`(${item.pairRank[0]}, ${
+                              item.pairRank[1] === -1 ? "$" : item.pairRank[1]
+                            })`}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {item.newRank}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -286,6 +279,15 @@ const SuffixArrayVisualizer = () => {
         )}
       </div>
     );
+  };
+
+  const handleCalculate = () => {
+    if (!input) return;
+    setIsProcessing(true);
+    const newSteps = calculateSuffixArray(input);
+    setSteps(newSteps);
+    setCurrentStep(0);
+    setIsProcessing(false);
   };
 
   return (
@@ -333,7 +335,7 @@ const SuffixArrayVisualizer = () => {
                 다음 단계
               </button>
             </div>
-            <StepVisualizer step={steps[currentStep]} />
+            <StepVisualizer step={steps[currentStep]} input={input} />
           </div>
         )}
       </div>
