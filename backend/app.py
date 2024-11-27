@@ -26,6 +26,7 @@ def calculate_suffix_array(s):
     while k < n:
         # Pair 생성
         pairs = []
+        new_pairs = []
         for i in range(n):
             next_rank = rank[i + k] if i + k < n else -1
             pairs.append({
@@ -44,14 +45,14 @@ def calculate_suffix_array(s):
         })
         
         # Pair 정렬
-        pairs.sort(key=lambda x: (x["pair"][0], x["pair"][1]))
+        new_pairs = pairs.sort(key=lambda x: (x["pair"][0], x["pair"][1]))
         
         steps.append({
             "phase": "페어 정렬",
             "k": k,
             "ranks": rank[:-1],
             "pairs": pairs,
-            "sortedPairs": pairs,
+            "sortedPairs": new_pairs,
             "description": "페어를 기준으로 정렬"
         })
         

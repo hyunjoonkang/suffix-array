@@ -6,76 +6,55 @@ const SuffixArrayVisualizer = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 기수 정렬 구현
-  const radixSort = (pairs) => {
-    let sortedPairs = [...pairs];
+  // Radix sort 구현
+  const radixSortPairs = (pairs) => {
     let sortingSteps = [];
+    const n = pairs.length;
+    let result = [...pairs];
 
-    // 두 개의 키(pair[0], pair[1])에 대해 각각 정렬
-    for (let keyIndex = 1; keyIndex >= 0; keyIndex--) {
-      // 현재 키의 최대값 찾기
-      const max = Math.max(...sortedPairs.map((p) => p.pair[keyIndex] + 1));
+    // 두 번째 값으로 먼저 정렬한 후 첫 번째 값으로 정렬 (안정성 유지)
+    for (let pairIndex = 1; pairIndex >= 0; pairIndex--) {
+      // 버킷 초기화
+      let buckets = Array.from({ length: 300 }, () => []); // ASCII 값 범위 고려
 
-      // 각 자릿수별로 정렬
-      for (let exp = 1; Math.floor(max / exp) > 0; exp *= 10) {
-        const output = new Array(sortedPairs.length).fill(null);
-        const count = new Array(10).fill(0);
-
-        // Count 배열 채우기
-        for (let i = 0; i < sortedPairs.length; i++) {
-          const num = sortedPairs[i].pair[keyIndex] + 1; // 음수 처리를 위해 +1
-          const digit = Math.floor(num / exp) % 10;
-          count[digit]++;
-        }
-
-        // Count 배열 누적합 계산
-        for (let i = 1; i < 10; i++) {
-          count[i] += count[i - 1];
-        }
-
-        // 뒤에서부터 정렬하여 안정성 보장
-        for (let i = sortedPairs.length - 1; i >= 0; i--) {
-          const num = sortedPairs[i].pair[keyIndex] + 1;
-          const digit = Math.floor(num / exp) % 10;
-          output[count[digit] - 1] = sortedPairs[i];
-          count[digit]--;
-        }
-
-        sortedPairs = [...output];
-
-        // 정렬 과정 저장
-        sortingSteps.push({
-          phase: "기수 정렬",
-          sortedPairs: [...sortedPairs],
-          description: `${
-            keyIndex === 0 ? "첫 번째" : "두 번째"
-          } 키의 ${exp}의 자릿수로 정렬 중`,
-          digit: exp,
-          keyIndex: keyIndex,
-          countArray: [...count],
-        });
+      // 현재 값에 따라 버킷에 분배
+      for (let i = 0; i < n; i++) {
+        const value = result[i].pair[pairIndex];
+        buckets[value + 128].push(result[i]); // 음수 처리를 위해 +128
       }
+
+      // 버킷에서 순서대로 가져오기
+      result = [];
+      for (let bucket of buckets) {
+        if (bucket.length > 0) {
+          result.push(...bucket);
+        }
+      }
+
+      // 정렬 단계 저장
+      sortingSteps.push({
+        phase: "기수 정렬",
+        description: `${pairIndex === 0 ? "첫" : "두"} 번째 값 기준 정렬`,
+        sortedPairs: [...result],
+        radixInfo: {
+          currentKey: pairIndex,
+          bucketSample: buckets.map((b) => b.length).filter((l) => l > 0),
+        },
+      });
     }
 
-    return { sortedPairs, sortingSteps };
+    return { sortedPairs: result, sortingSteps };
   };
 
   const calculateSuffixArray = (s) => {
     const n = s.length;
     let rank = Array(n + 1).fill(0);
     let newRank = Array(n + 1).fill(0);
-    let sa = Array.from({ length: n }, (_, i) => i);
     let steps = [];
 
-    // 문자 빈도수 계산
-    const charFreq = {};
-    for (let char of s) {
-      charFreq[char] = (charFreq[char] || 0) + 1;
-    }
-
-    // 초기 순위 설정 (문자 빈도수 기준)
-    rank = [...s].map((c) => charFreq[c]);
-    rank.push(-1);
+    // 초기 순위 설정 (사전순)
+    rank = [...s].map((c) => c.charCodeAt(0));
+    rank.push(-1); // 문자열 끝 표시
 
     steps.push({
       phase: "초기화",
@@ -83,13 +62,13 @@ const SuffixArrayVisualizer = () => {
       ranks: [...rank],
       pairs: null,
       sortedPairs: null,
-      charFreq: { ...charFreq },
-      description: "문자 빈도수 기준으로 초기 순위 부여",
+      description: "사전순으로 초기 순위 부여",
     });
 
     // Doubling 알고리즘
     for (let k = 1; k < n; k *= 2) {
       let pairs = [];
+      // k 길이 페어 생성
       for (let i = 0; i < n; i++) {
         const nextRank = i + k < n ? rank[i + k] : -1;
         pairs.push({
@@ -105,25 +84,23 @@ const SuffixArrayVisualizer = () => {
         ranks: [...rank],
         pairs: [...pairs],
         sortedPairs: null,
-        charFreq: { ...charFreq },
         description: `k=${k}일 때의 페어 생성`,
       });
 
       // 기수 정렬 적용
-      const { sortedPairs, sortingSteps } = radixSort(pairs);
+      const { sortedPairs, sortingSteps } = radixSortPairs(pairs);
 
       // 정렬 과정의 각 단계를 steps에 추가
-      steps.push(
-        ...sortingSteps.map((step) => ({
+      sortingSteps.forEach((step) => {
+        steps.push({
           ...step,
           k: k,
           ranks: [...rank],
           pairs: [...pairs],
-          charFreq: { ...charFreq },
-        }))
-      );
+        });
+      });
 
-      // 새로운 순위 갱신
+      // 새로운 순위 부여
       newRank = Array(n + 1).fill(0);
       newRank[sortedPairs[0].index] = 0;
       let rankValue = 0;
@@ -144,41 +121,30 @@ const SuffixArrayVisualizer = () => {
         ranks: [...newRank],
         pairs: [...pairs],
         sortedPairs: [...sortedPairs],
-        charFreq: { ...charFreq },
         description: "새로운 순위 부여 완료",
       });
 
-      if (rankValue === n - 1) break;
+      if (rankValue === n - 1) {
+        // 모든 순위가 다르면 종료
+        steps.push({
+          phase: "최종 결과",
+          k: k,
+          ranks: [...newRank],
+          pairs: null,
+          sortedPairs: sortedPairs.map((p) => ({
+            index: p.index,
+            suffix: p.suffix,
+            rank: rankValue,
+          })),
+          description: "모든 접미사가 사전순으로 정렬됨",
+        });
+        break;
+      }
+
       rank = [...newRank];
     }
 
-    // 최종 결과 추가
-    steps.push({
-      phase: "최종 결과",
-      k: null,
-      ranks: [...rank],
-      pairs: null,
-      sortedPairs: [...sa]
-        .sort((a, b) => rank[a] - rank[b])
-        .map((i) => ({
-          index: i,
-          suffix: s.slice(i),
-          rank: rank[i],
-        })),
-      charFreq: { ...charFreq },
-      description: "모든 접미사가 사전순으로 정렬된 최종 결과",
-    });
-
     return steps;
-  };
-
-  const handleCalculate = () => {
-    if (!input) return;
-    setIsProcessing(true);
-    const newSteps = calculateSuffixArray(input);
-    setSteps(newSteps);
-    setCurrentStep(0);
-    setIsProcessing(false);
   };
 
   const StepVisualizer = ({ step }) => {
@@ -193,42 +159,20 @@ const SuffixArrayVisualizer = () => {
           <p className="text-blue-700">{step.description}</p>
         </div>
 
-        {step.charFreq && (
-          <div className="p-4 bg-green-50 rounded-lg">
-            <h4 className="text-lg font-semibold text-green-900">
-              문자 빈도수
-            </h4>
-            <div className="grid grid-cols-4 gap-4 mt-2">
-              {Object.entries(step.charFreq).map(([char, freq]) => (
-                <div key={char} className="text-green-700">
-                  {char}: {freq}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {step.digit && (
+        {step.radixInfo && (
           <div className="p-4 bg-yellow-50 rounded-lg">
             <h4 className="text-lg font-semibold text-yellow-900">
               기수 정렬 정보
             </h4>
             <p className="text-yellow-700">
-              정렬 중인 키: {step.keyIndex === 0 ? "첫 번째" : "두 번째"} 키
+              현재 정렬 중인 키: {step.radixInfo.currentKey === 0 ? "첫" : "두"}{" "}
+              번째 값
             </p>
-            <p className="text-yellow-700">
-              현재 처리 중인 자릿수: {step.digit}
-            </p>
-            {step.countArray && (
+            {step.radixInfo.bucketSample.length > 0 && (
               <div className="mt-2">
-                <p className="text-yellow-900 font-semibold">카운트 배열:</p>
-                <div className="grid grid-cols-10 gap-2 mt-1">
-                  {step.countArray.map((count, idx) => (
-                    <div key={idx} className="text-yellow-700">
-                      {idx}: {count}
-                    </div>
-                  ))}
-                </div>
+                <p className="text-yellow-900 font-semibold">
+                  비어있지 않은 버킷 수: {step.radixInfo.bucketSample.length}
+                </p>
               </div>
             )}
           </div>
@@ -245,7 +189,7 @@ const SuffixArrayVisualizer = () => {
                   접미사
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  현재 순위
+                  순위
                 </th>
                 {step.pairs && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -280,7 +224,7 @@ const SuffixArrayVisualizer = () => {
 
         {step.sortedPairs && (
           <div className="mt-4">
-            <h4 className="text-lg font-semibold mb-2">정렬된 페어</h4>
+            <h4 className="text-lg font-semibold mb-2">정렬된 결과</h4>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -292,7 +236,7 @@ const SuffixArrayVisualizer = () => {
                       접미사
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      페어
+                      값
                     </th>
                   </tr>
                 </thead>
@@ -321,11 +265,20 @@ const SuffixArrayVisualizer = () => {
     );
   };
 
+  const handleCalculate = () => {
+    if (!input) return;
+    setIsProcessing(true);
+    const newSteps = calculateSuffixArray(input);
+    setSteps(newSteps);
+    setCurrentStep(0);
+    setIsProcessing(false);
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-4 space-y-6">
       <div className="bg-white shadow rounded-lg p-6">
         <h2 className="text-2xl font-bold mb-4">
-          Suffix Array 시각화 (기수 정렬)
+          Suffix Array 시각화 (기수 정렬 + Doubling)
         </h2>
 
         <div className="flex space-x-4 mb-6">
