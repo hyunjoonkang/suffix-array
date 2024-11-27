@@ -94,6 +94,10 @@ const SuffixArrayVisualizer = () => {
           index: i,
           suffix: s.slice(i),
           pairRank: [rank[i], i + currentK < n ? rank[i + currentK] : -1],
+          pairString: [
+            s.slice(i, i + currentK), // 현재 k만큼의 문자열
+            i + currentK < n ? s.slice(i + currentK, i + currentK * 2) : "$", // 다음 k만큼의 문자열
+          ],
           newRank: tempRank[i],
         })),
         sortedSuffixes: currentPairs.map((item, idx) => ({
@@ -101,6 +105,12 @@ const SuffixArrayVisualizer = () => {
           index: item.index,
           suffix: item.suffix,
           pairRank: [item.currentRank, item.nextRank],
+          pairString: [
+            s.slice(item.index, item.index + currentK),
+            item.index + currentK < n
+              ? s.slice(item.index + currentK, item.index + currentK * 2)
+              : "$",
+          ],
           newRank: tempRank[item.index],
         })),
         description: `길이 ${currentK * 2}를 기준으로 정렬 및 새로운 순위 부여`,
@@ -200,7 +210,11 @@ const SuffixArrayVisualizer = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {`(${item.pairRank[0]}, ${
                             item.pairRank[1] === -1 ? "$" : item.pairRank[1]
-                          })`}
+                          }) // ${item.pairString[0]},${
+                            item.pairString[1] === "$"
+                              ? "$"
+                              : item.pairString[1]
+                          }`}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {item.newRank}
